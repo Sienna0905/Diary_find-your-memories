@@ -7,3 +7,9 @@ __pycache__/
 # Local database and runtime artifacts
 diary_app.db
 last_page.txt
+
+# Personal diary data
+weibo_data.json
+weibo_data - ¸±±¾.json
+weibo_diary.json
+weibo_diary.xlsx
