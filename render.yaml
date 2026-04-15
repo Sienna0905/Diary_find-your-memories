@@ -10,7 +10,7 @@ services:
         value: 3.11.9
       - key: DB_PATH
         value: /var/data/diary_app.db
-    disks:
-      - name: weibo-diary-data
-        mountPath: /var/data
-        sizeGB: 1
+    disk:
+      name: weibo-diary-data
+      mountPath: /var/data
+      sizeGB: 1
