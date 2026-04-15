@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+
+# Local database and runtime artifacts
+diary_app.db
+last_page.txt
