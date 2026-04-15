@@ -4,7 +4,6 @@ import io
 import json
 import os
 import re
-import sqlite3
 from datetime import date
 from pathlib import Path
 from typing import Optional
@@ -12,8 +11,18 @@ from typing import Optional
 import bcrypt
 import pandas as pd
 import streamlit as st
+from sqlalchemy import create_engine, text
+from sqlalchemy.engine import Engine
+from sqlalchemy.exc import IntegrityError
 
 DB_PATH = Path(os.getenv("DB_PATH", "diary_app.db"))
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+if DATABASE_URL:
+    # Supabase 常见前缀是 postgres://，SQLAlchemy 需要 postgresql://
+    NORMALIZED_DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
+else:
+    NORMALIZED_DATABASE_URL = f"sqlite:///{DB_PATH.as_posix()}"
+ENGINE: Engine = create_engine(NORMALIZED_DATABASE_URL, pool_pre_ping=True)
 
 st.set_page_config(page_title="微博日记本", page_icon="📔", layout="centered")
 
@@ -48,40 +57,48 @@ def inject_styles() -> None:
     )
 
 
-def get_conn() -> sqlite3.Connection:
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+def db_now_expression() -> str:
+    return "CURRENT_TIMESTAMP"
+
+
+def sqlite_autoincrement_type() -> str:
+    if NORMALIZED_DATABASE_URL.startswith("sqlite:///"):
+        return "INTEGER PRIMARY KEY AUTOINCREMENT"
+    return "SERIAL PRIMARY KEY"
 
 
 def init_db() -> None:
-    with get_conn() as conn:
+    with ENGINE.begin() as conn:
         conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS users (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                username TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            text(
+                f"""
+                CREATE TABLE IF NOT EXISTS users (
+                    id {sqlite_autoincrement_type()},
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL,
+                    created_at TEXT DEFAULT {db_now_expression()}
+                )
+                """
             )
-            """
         )
         conn.execute(
-            """
-            CREATE TABLE IF NOT EXISTS diaries (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                date TEXT NOT NULL,
-                time TEXT NOT NULL,
-                content TEXT NOT NULL,
-                source TEXT DEFAULT 'Streamlit日记',
-                likes INTEGER DEFAULT 0,
-                comments INTEGER DEFAULT 0,
-                reposts INTEGER DEFAULT 0,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY(user_id) REFERENCES users(id)
+            text(
+                f"""
+                CREATE TABLE IF NOT EXISTS diaries (
+                    id {sqlite_autoincrement_type()},
+                    user_id INTEGER NOT NULL,
+                    date TEXT NOT NULL,
+                    time TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    source TEXT DEFAULT 'Streamlit日记',
+                    likes INTEGER DEFAULT 0,
+                    comments INTEGER DEFAULT 0,
+                    reposts INTEGER DEFAULT 0,
+                    created_at TEXT DEFAULT {db_now_expression()},
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+                """
             )
-            """
         )
 
 
@@ -115,24 +132,24 @@ def register_user(username: str, password: str) -> tuple[bool, str]:
     if len(password) < 6:
         return False, "密码至少 6 位。"
     try:
-        with get_conn() as conn:
+        with ENGINE.begin() as conn:
             conn.execute(
-                "INSERT INTO users (username, password_hash) VALUES (?, ?)",
-                (username.strip(), password_hash(password)),
+                text("INSERT INTO users (username, password_hash) VALUES (:username, :password_hash)"),
+                {"username": username.strip(), "password_hash": password_hash(password)},
             )
         return True, "注册成功，请登录。"
-    except sqlite3.IntegrityError:
+    except IntegrityError:
         return False, "用户名已存在，请更换。"
     except Exception as e:
         return False, f"注册失败：{e}"
 
 
 def login_user(username: str, password: str) -> Optional[dict]:
-    with get_conn() as conn:
+    with ENGINE.begin() as conn:
         row = conn.execute(
-            "SELECT id, username, password_hash FROM users WHERE username = ?",
-            (username.strip(),),
-        ).fetchone()
+            text("SELECT id, username, password_hash FROM users WHERE username = :username"),
+            {"username": username.strip()},
+        ).mappings().fetchone()
         if not row:
             return None
         stored_hash = row["password_hash"]
@@ -142,8 +159,8 @@ def login_user(username: str, password: str) -> Optional[dict]:
         # 老账号平滑升级：sha256 登录成功后自动改为 bcrypt
         if is_legacy_sha256(stored_hash):
             conn.execute(
-                "UPDATE users SET password_hash = ? WHERE id = ?",
-                (password_hash(password), row["id"]),
+                text("UPDATE users SET password_hash = :password_hash WHERE id = :user_id"),
+                {"password_hash": password_hash(password), "user_id": row["id"]},
             )
 
     return {"id": row["id"], "username": row["username"]}
@@ -151,16 +168,18 @@ def login_user(username: str, password: str) -> Optional[dict]:
 
 @st.cache_data(ttl=10)
 def load_user_diaries(user_id: int) -> pd.DataFrame:
-    with get_conn() as conn:
+    with ENGINE.begin() as conn:
         rows = conn.execute(
-            """
-            SELECT id, date, time, content, source, likes, comments, reposts
-            FROM diaries
-            WHERE user_id = ?
-            ORDER BY date DESC, time DESC, id DESC
-            """,
-            (user_id,),
-        ).fetchall()
+            text(
+                """
+                SELECT id, date, time, content, source, likes, comments, reposts
+                FROM diaries
+                WHERE user_id = :user_id
+                ORDER BY date DESC, time DESC, id DESC
+                """
+            ),
+            {"user_id": user_id},
+        ).mappings().all()
     df = pd.DataFrame([dict(r) for r in rows])
     if df.empty:
         # 新账号没有数据时，也返回完整字段，避免页面访问 month/day 等列时报 KeyError。
@@ -199,7 +218,7 @@ def import_json_for_user(user_id: int, source_file: Path) -> tuple[bool, str]:
             return False, "JSON 格式应为列表。"
 
         inserted = 0
-        with get_conn() as conn:
+        with ENGINE.begin() as conn:
             for item in raw:
                 d = str(item.get("date", "")).strip()
                 t = str(item.get("time", "")).strip() or "00:00:00"
@@ -207,30 +226,34 @@ def import_json_for_user(user_id: int, source_file: Path) -> tuple[bool, str]:
                 if not d or not content:
                     continue
                 exists = conn.execute(
-                    """
-                    SELECT 1 FROM diaries
-                    WHERE user_id=? AND date=? AND time=? AND content=?
-                    LIMIT 1
-                    """,
-                    (user_id, d, t, content),
-                ).fetchone()
+                    text(
+                        """
+                        SELECT 1 FROM diaries
+                        WHERE user_id=:user_id AND date=:date_v AND time=:time_v AND content=:content_v
+                        LIMIT 1
+                        """
+                    ),
+                    {"user_id": user_id, "date_v": d, "time_v": t, "content_v": content},
+                ).first()
                 if exists:
                     continue
                 conn.execute(
-                    """
-                    INSERT INTO diaries (user_id, date, time, content, source, likes, comments, reposts)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
-                    (
-                        user_id,
-                        d,
-                        t,
-                        content,
-                        str(item.get("source", "微博导入")),
-                        int(item.get("likes", 0) or 0),
-                        int(item.get("comments", 0) or 0),
-                        int(item.get("reposts", 0) or 0),
+                    text(
+                        """
+                        INSERT INTO diaries (user_id, date, time, content, source, likes, comments, reposts)
+                        VALUES (:user_id, :date_v, :time_v, :content_v, :source_v, :likes_v, :comments_v, :reposts_v)
+                        """
                     ),
+                    {
+                        "user_id": user_id,
+                        "date_v": d,
+                        "time_v": t,
+                        "content_v": content,
+                        "source_v": str(item.get("source", "微博导入")),
+                        "likes_v": int(item.get("likes", 0) or 0),
+                        "comments_v": int(item.get("comments", 0) or 0),
+                        "reposts_v": int(item.get("reposts", 0) or 0),
+                    },
                 )
                 inserted += 1
         load_user_diaries.clear()
@@ -241,13 +264,21 @@ def import_json_for_user(user_id: int, source_file: Path) -> tuple[bool, str]:
 
 def create_diary(user_id: int, d: date, t: str, content: str, source: str) -> tuple[bool, str]:
     try:
-        with get_conn() as conn:
+        with ENGINE.begin() as conn:
             conn.execute(
-                """
-                INSERT INTO diaries (user_id, date, time, content, source)
-                VALUES (?, ?, ?, ?, ?)
-                """,
-                (user_id, d.strftime("%Y-%m-%d"), t or "00:00:00", content.strip(), source.strip() or "Streamlit日记"),
+                text(
+                    """
+                    INSERT INTO diaries (user_id, date, time, content, source)
+                    VALUES (:user_id, :date_v, :time_v, :content_v, :source_v)
+                    """
+                ),
+                {
+                    "user_id": user_id,
+                    "date_v": d.strftime("%Y-%m-%d"),
+                    "time_v": t or "00:00:00",
+                    "content_v": content.strip(),
+                    "source_v": source.strip() or "Streamlit日记",
+                },
             )
         load_user_diaries.clear()
         return True, "保存成功。"
@@ -257,10 +288,10 @@ def create_diary(user_id: int, d: date, t: str, content: str, source: str) -> tu
 
 def update_diary(user_id: int, diary_id: int, new_content: str) -> tuple[bool, str]:
     try:
-        with get_conn() as conn:
+        with ENGINE.begin() as conn:
             result = conn.execute(
-                "UPDATE diaries SET content=? WHERE id=? AND user_id=?",
-                (new_content.strip(), diary_id, user_id),
+                text("UPDATE diaries SET content=:content_v WHERE id=:diary_id AND user_id=:user_id"),
+                {"content_v": new_content.strip(), "diary_id": diary_id, "user_id": user_id},
             )
         load_user_diaries.clear()
         if result.rowcount == 0:
@@ -272,8 +303,11 @@ def update_diary(user_id: int, diary_id: int, new_content: str) -> tuple[bool, s
 
 def delete_diary(user_id: int, diary_id: int) -> tuple[bool, str]:
     try:
-        with get_conn() as conn:
-            result = conn.execute("DELETE FROM diaries WHERE id=? AND user_id=?", (diary_id, user_id))
+        with ENGINE.begin() as conn:
+            result = conn.execute(
+                text("DELETE FROM diaries WHERE id=:diary_id AND user_id=:user_id"),
+                {"diary_id": diary_id, "user_id": user_id},
+            )
         load_user_diaries.clear()
         if result.rowcount == 0:
             return False, "未找到该记录。"

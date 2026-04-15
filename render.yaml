@@ -8,9 +8,7 @@ services:
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
+      - key: DATABASE_URL
+        sync: false
       - key: DB_PATH
-        value: /var/data/diary_app.db
-    disk:
-      name: weibo-diary-data
-      mountPath: /var/data
-      sizeGB: 1
+        value: /tmp/diary_app.db
