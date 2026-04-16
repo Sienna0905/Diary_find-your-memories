@@ -589,7 +589,12 @@ def render_monthly_stats(df: pd.DataFrame) -> None:
         .rename(columns={0: "一", 1: "二", 2: "三", 3: "四", 4: "五", 5: "六", 6: "日"})
     )
     st.caption("日历热力图（周 x 星期）")
-    st.dataframe(heat.style.background_gradient(cmap="YlOrBr"), use_container_width=True)
+    try:
+        st.dataframe(heat.style.background_gradient(cmap="YlOrBr"), use_container_width=True)
+    except ImportError:
+        # 某些部署环境未安装 matplotlib，降级为普通表格显示。
+        st.info("当前环境缺少热力图渲染依赖，已切换为普通表格展示。")
+        st.dataframe(heat, use_container_width=True)
 
     md_text = build_month_markdown(month_df, selected_month)
     st.download_button(

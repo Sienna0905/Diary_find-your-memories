@@ -6,3 +6,4 @@ reportlab
 bcrypt
 sqlalchemy
 psycopg2-binary
+matplotlib
