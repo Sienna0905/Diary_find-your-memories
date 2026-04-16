@@ -24,7 +24,7 @@ else:
     NORMALIZED_DATABASE_URL = f"sqlite:///{DB_PATH.as_posix()}"
 ENGINE: Engine = create_engine(NORMALIZED_DATABASE_URL, pool_pre_ping=True)
 
-st.set_page_config(page_title="微博日记本", page_icon="📔", layout="centered")
+st.set_page_config(page_title="find your memory", page_icon="📔", layout="centered")
 
 
 def inject_styles() -> None:
@@ -32,7 +32,7 @@ def inject_styles() -> None:
         """
         <style>
         .stApp { background: #FDF6E3; }
-        .block-container { max-width: 980px; padding-top: 1.2rem; padding-bottom: 2rem; }
+        .block-container { max-width: 980px; padding-top: 3.6rem; padding-bottom: 2rem; }
         .main-title { font-size: 1.9rem; font-weight: 700; color: #5B4636; margin-bottom: .2rem; }
         .sub-title { color: #8B6F5C; margin-bottom: 1rem; }
         .section-title { font-size: 1.2rem; font-weight: 700; color: #5B4636; margin: .3rem 0 .7rem 0; }
@@ -50,6 +50,7 @@ def inject_styles() -> None:
             .main-title { font-size: 1.55rem; }
             .section-title { font-size: 1.05rem; }
             .diary-card { padding: 12px 14px; }
+            .block-container { padding-top: 3.2rem; }
         }
         </style>
         """,
@@ -249,7 +250,7 @@ def import_json_for_user(user_id: int, source_file: Path) -> tuple[bool, str]:
                         "date_v": d,
                         "time_v": t,
                         "content_v": content,
-                        "source_v": str(item.get("source", "微博导入")),
+                        "source_v": str(item.get("source", "历史导入")),
                         "likes_v": int(item.get("likes", 0) or 0),
                         "comments_v": int(item.get("comments", 0) or 0),
                         "reposts_v": int(item.get("reposts", 0) or 0),
@@ -297,7 +298,7 @@ def import_json_records_for_user(user_id: int, records: list[dict]) -> tuple[boo
                         "date_v": d,
                         "time_v": t,
                         "content_v": content,
-                        "source_v": str(item.get("source", "微博导入")),
+                        "source_v": str(item.get("source", "历史导入")),
                         "likes_v": int(item.get("likes", 0) or 0),
                         "comments_v": int(item.get("comments", 0) or 0),
                         "reposts_v": int(item.get("reposts", 0) or 0),
@@ -393,7 +394,7 @@ def try_build_month_pdf(markdown_text: str) -> tuple[bytes | None, str | None]:
         width, height = A4
         x, y = 40, height - 50
         c.setFont("STSong-Light", 16)
-        c.drawString(x, y, "微博日记导出")
+        c.drawString(x, y, "Find Your Memory Export")
         y -= 28
         c.setFont("STSong-Light", 12)
         for line in markdown_text.splitlines():
@@ -446,7 +447,7 @@ def render_diary_card(row: pd.Series, keywords: list[str] | None = None) -> None
 
 
 def render_auth_panel() -> None:
-    st.markdown('<div class="main-title">📔 微博日记本</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">📔 find your memory</div>', unsafe_allow_html=True)
     st.markdown('<div class="sub-title">支持多账号隔离，手机也可访问</div>', unsafe_allow_html=True)
     login_tab, register_tab = st.tabs(["登录", "注册"])
     with login_tab:
@@ -616,7 +617,7 @@ def render_monthly_stats(df: pd.DataFrame) -> None:
     st.download_button(
         "下载 Markdown",
         data=md_text.encode("utf-8"),
-        file_name=f"weibo_diary_{selected_month}.md",
+        file_name=f"find_your_memory_{selected_month}.md",
         mime="text/markdown",
         use_container_width=True,
     )
@@ -625,7 +626,7 @@ def render_monthly_stats(df: pd.DataFrame) -> None:
         st.download_button(
             "下载 PDF",
             data=pdf_bytes,
-            file_name=f"weibo_diary_{selected_month}.pdf",
+            file_name=f"find_your_memory_{selected_month}.pdf",
             mime="application/pdf",
             use_container_width=True,
         )
@@ -640,7 +641,7 @@ def render_import_panel(user_id: int) -> None:
         unsafe_allow_html=True,
     )
 
-    uploaded_file = st.file_uploader("上传你的 weibo_diary.json / weibo_data.json", type=["json"])
+    uploaded_file = st.file_uploader("上传你的历史日记 JSON 文件", type=["json"])
     if uploaded_file is not None:
         if st.button("导入上传文件", use_container_width=True, type="primary"):
             try:
@@ -659,16 +660,18 @@ def render_import_panel(user_id: int) -> None:
 
     st.caption("（可选）使用服务器本地文件导入")
     c1, c2 = st.columns(2)
-    if c1.button("导入 weibo_diary.json", use_container_width=True):
-        success, msg = import_json_for_user(user_id, Path("weibo_diary.json"))
+    if c1.button("导入 diary.json", use_container_width=True):
+        target = Path("diary.json") if Path("diary.json").exists() else Path("weibo_diary.json")
+        success, msg = import_json_for_user(user_id, target)
         if success:
             st.success(msg)
         else:
             st.error(msg)
         if success:
             st.rerun()
-    if c2.button("导入 weibo_data.json", use_container_width=True):
-        success, msg = import_json_for_user(user_id, Path("weibo_data.json"))
+    if c2.button("导入 raw_data.json", use_container_width=True):
+        target = Path("raw_data.json") if Path("raw_data.json").exists() else Path("weibo_data.json")
+        success, msg = import_json_for_user(user_id, target)
         if success:
             st.success(msg)
         else:
@@ -696,7 +699,7 @@ def main() -> None:
         return
 
     render_sidebar(user)
-    st.markdown('<div class="main-title">📔 微博日记本</div>', unsafe_allow_html=True)
+    st.markdown('<div class="main-title">📔 find your memory</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="sub-title">当前账号：{user["username"]}</div>', unsafe_allow_html=True)
 
     df = load_user_diaries(user["id"])
