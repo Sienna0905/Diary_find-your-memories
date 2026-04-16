@@ -209,6 +209,68 @@ def load_user_diaries(user_id: int) -> pd.DataFrame:
     return df
 
 
+def _normalize_import_record(item: dict) -> dict | None:
+    d = str(item.get("date", "")).strip()
+    t = str(item.get("time", "")).strip() or "00:00:00"
+    content = str(item.get("content", "")).strip()
+    if not d or not content:
+        return None
+    return {
+        "date_v": d,
+        "time_v": t,
+        "content_v": content,
+        "source_v": str(item.get("source", "历史导入")),
+        "likes_v": int(item.get("likes", 0) or 0),
+        "comments_v": int(item.get("comments", 0) or 0),
+        "reposts_v": int(item.get("reposts", 0) or 0),
+    }
+
+
+def _import_records_core(user_id: int, records: list[dict], progress_callback=None) -> tuple[bool, str]:
+    try:
+        with ENGINE.begin() as conn:
+            existing_rows = conn.execute(
+                text("SELECT date, time, content FROM diaries WHERE user_id=:user_id"),
+                {"user_id": user_id},
+            ).mappings().all()
+            existing_keys = {
+                (str(r["date"]).strip(), str(r["time"]).strip(), str(r["content"]).strip())
+                for r in existing_rows
+            }
+
+            to_insert = []
+            total = len(records)
+            for idx, item in enumerate(records, start=1):
+                normalized = _normalize_import_record(item)
+                if normalized is None:
+                    continue
+                key = (normalized["date_v"], normalized["time_v"], normalized["content_v"])
+                if key in existing_keys:
+                    continue
+                existing_keys.add(key)
+                to_insert.append({"user_id": user_id, **normalized})
+
+                if progress_callback and (idx % 500 == 0 or idx == total):
+                    progress_callback(idx, total)
+
+            if to_insert:
+                insert_stmt = text(
+                    """
+                    INSERT INTO diaries (user_id, date, time, content, source, likes, comments, reposts)
+                    VALUES (:user_id, :date_v, :time_v, :content_v, :source_v, :likes_v, :comments_v, :reposts_v)
+                    """
+                )
+                chunk_size = 1000
+                total_insert = len(to_insert)
+                for i in range(0, total_insert, chunk_size):
+                    conn.execute(insert_stmt, to_insert[i : i + chunk_size])
+
+        load_user_diaries.clear()
+        return True, f"导入完成，新增 {len(to_insert)} 条。"
+    except Exception as e:
+        return False, f"导入失败：{e}"
+
+
 def import_json_for_user(user_id: int, source_file: Path) -> tuple[bool, str]:
     if not source_file.exists():
         return False, f"文件不存在：{source_file.name}"
@@ -217,98 +279,14 @@ def import_json_for_user(user_id: int, source_file: Path) -> tuple[bool, str]:
             raw = json.load(f)
         if not isinstance(raw, list):
             return False, "JSON 格式应为列表。"
-
-        inserted = 0
-        with ENGINE.begin() as conn:
-            for item in raw:
-                d = str(item.get("date", "")).strip()
-                t = str(item.get("time", "")).strip() or "00:00:00"
-                content = str(item.get("content", "")).strip()
-                if not d or not content:
-                    continue
-                exists = conn.execute(
-                    text(
-                        """
-                        SELECT 1 FROM diaries
-                        WHERE user_id=:user_id AND date=:date_v AND time=:time_v AND content=:content_v
-                        LIMIT 1
-                        """
-                    ),
-                    {"user_id": user_id, "date_v": d, "time_v": t, "content_v": content},
-                ).first()
-                if exists:
-                    continue
-                conn.execute(
-                    text(
-                        """
-                        INSERT INTO diaries (user_id, date, time, content, source, likes, comments, reposts)
-                        VALUES (:user_id, :date_v, :time_v, :content_v, :source_v, :likes_v, :comments_v, :reposts_v)
-                        """
-                    ),
-                    {
-                        "user_id": user_id,
-                        "date_v": d,
-                        "time_v": t,
-                        "content_v": content,
-                        "source_v": str(item.get("source", "历史导入")),
-                        "likes_v": int(item.get("likes", 0) or 0),
-                        "comments_v": int(item.get("comments", 0) or 0),
-                        "reposts_v": int(item.get("reposts", 0) or 0),
-                    },
-                )
-                inserted += 1
-        load_user_diaries.clear()
-        return True, f"导入完成，新增 {inserted} 条。"
+        return _import_records_core(user_id, raw)
     except Exception as e:
         return False, f"导入失败：{e}"
 
 
 def import_json_records_for_user(user_id: int, records: list[dict]) -> tuple[bool, str]:
     """把前端上传的 JSON 记录导入当前用户。"""
-    try:
-        inserted = 0
-        with ENGINE.begin() as conn:
-            for item in records:
-                d = str(item.get("date", "")).strip()
-                t = str(item.get("time", "")).strip() or "00:00:00"
-                content = str(item.get("content", "")).strip()
-                if not d or not content:
-                    continue
-                exists = conn.execute(
-                    text(
-                        """
-                        SELECT 1 FROM diaries
-                        WHERE user_id=:user_id AND date=:date_v AND time=:time_v AND content=:content_v
-                        LIMIT 1
-                        """
-                    ),
-                    {"user_id": user_id, "date_v": d, "time_v": t, "content_v": content},
-                ).first()
-                if exists:
-                    continue
-                conn.execute(
-                    text(
-                        """
-                        INSERT INTO diaries (user_id, date, time, content, source, likes, comments, reposts)
-                        VALUES (:user_id, :date_v, :time_v, :content_v, :source_v, :likes_v, :comments_v, :reposts_v)
-                        """
-                    ),
-                    {
-                        "user_id": user_id,
-                        "date_v": d,
-                        "time_v": t,
-                        "content_v": content,
-                        "source_v": str(item.get("source", "历史导入")),
-                        "likes_v": int(item.get("likes", 0) or 0),
-                        "comments_v": int(item.get("comments", 0) or 0),
-                        "reposts_v": int(item.get("reposts", 0) or 0),
-                    },
-                )
-                inserted += 1
-        load_user_diaries.clear()
-        return True, f"导入完成，新增 {inserted} 条。"
-    except Exception as e:
-        return False, f"导入失败：{e}"
+    return _import_records_core(user_id, records)
 
 
 def create_diary(user_id: int, d: date, t: str, content: str, source: str) -> tuple[bool, str]:
@@ -649,7 +627,17 @@ def render_import_panel(user_id: int) -> None:
                 if not isinstance(records, list):
                     st.error("上传文件格式错误：JSON 顶层应为列表。")
                     return
-                success, msg = import_json_records_for_user(user_id, records)
+                progress_bar = st.progress(0)
+                progress_text = st.empty()
+
+                def _progress(current: int, total: int) -> None:
+                    ratio = min(1.0, current / max(total, 1))
+                    progress_bar.progress(ratio)
+                    progress_text.caption(f"正在导入：{current}/{total}")
+
+                success, msg = _import_records_core(user_id, records, progress_callback=_progress)
+                progress_bar.empty()
+                progress_text.empty()
                 if success:
                     st.success(msg)
                     st.rerun()
