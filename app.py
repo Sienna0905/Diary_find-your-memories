@@ -262,6 +262,54 @@ def import_json_for_user(user_id: int, source_file: Path) -> tuple[bool, str]:
         return False, f"导入失败：{e}"
 
 
+def import_json_records_for_user(user_id: int, records: list[dict]) -> tuple[bool, str]:
+    """把前端上传的 JSON 记录导入当前用户。"""
+    try:
+        inserted = 0
+        with ENGINE.begin() as conn:
+            for item in records:
+                d = str(item.get("date", "")).strip()
+                t = str(item.get("time", "")).strip() or "00:00:00"
+                content = str(item.get("content", "")).strip()
+                if not d or not content:
+                    continue
+                exists = conn.execute(
+                    text(
+                        """
+                        SELECT 1 FROM diaries
+                        WHERE user_id=:user_id AND date=:date_v AND time=:time_v AND content=:content_v
+                        LIMIT 1
+                        """
+                    ),
+                    {"user_id": user_id, "date_v": d, "time_v": t, "content_v": content},
+                ).first()
+                if exists:
+                    continue
+                conn.execute(
+                    text(
+                        """
+                        INSERT INTO diaries (user_id, date, time, content, source, likes, comments, reposts)
+                        VALUES (:user_id, :date_v, :time_v, :content_v, :source_v, :likes_v, :comments_v, :reposts_v)
+                        """
+                    ),
+                    {
+                        "user_id": user_id,
+                        "date_v": d,
+                        "time_v": t,
+                        "content_v": content,
+                        "source_v": str(item.get("source", "微博导入")),
+                        "likes_v": int(item.get("likes", 0) or 0),
+                        "comments_v": int(item.get("comments", 0) or 0),
+                        "reposts_v": int(item.get("reposts", 0) or 0),
+                    },
+                )
+                inserted += 1
+        load_user_diaries.clear()
+        return True, f"导入完成，新增 {inserted} 条。"
+    except Exception as e:
+        return False, f"导入失败：{e}"
+
+
 def create_diary(user_id: int, d: date, t: str, content: str, source: str) -> tuple[bool, str]:
     try:
         with ENGINE.begin() as conn:
@@ -587,16 +635,44 @@ def render_monthly_stats(df: pd.DataFrame) -> None:
 
 def render_import_panel(user_id: int) -> None:
     st.markdown('<div class="section-title">📥 导入历史 JSON</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hint-box">仅导入到当前登录账号，不会影响其他账号。</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="hint-box">仅导入到当前登录账号，不会影响其他账号。线上推荐使用“上传 JSON 导入”。</div>',
+        unsafe_allow_html=True,
+    )
+
+    uploaded_file = st.file_uploader("上传你的 weibo_diary.json / weibo_data.json", type=["json"])
+    if uploaded_file is not None:
+        if st.button("导入上传文件", use_container_width=True, type="primary"):
+            try:
+                records = json.load(uploaded_file)
+                if not isinstance(records, list):
+                    st.error("上传文件格式错误：JSON 顶层应为列表。")
+                    return
+                success, msg = import_json_records_for_user(user_id, records)
+                if success:
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
+            except Exception as e:
+                st.error(f"上传文件解析失败：{e}")
+
+    st.caption("（可选）使用服务器本地文件导入")
     c1, c2 = st.columns(2)
     if c1.button("导入 weibo_diary.json", use_container_width=True):
         success, msg = import_json_for_user(user_id, Path("weibo_diary.json"))
-        st.success(msg) if success else st.error(msg)
+        if success:
+            st.success(msg)
+        else:
+            st.error(msg)
         if success:
             st.rerun()
     if c2.button("导入 weibo_data.json", use_container_width=True):
         success, msg = import_json_for_user(user_id, Path("weibo_data.json"))
-        st.success(msg) if success else st.error(msg)
+        if success:
+            st.success(msg)
+        else:
+            st.error(msg)
         if success:
             st.rerun()
 
