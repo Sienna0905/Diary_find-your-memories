@@ -4,7 +4,8 @@ import io
 import json
 import os
 import re
-from datetime import date
+import time as _time
+from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
@@ -77,11 +78,17 @@ def init_db() -> None:
                     id {sqlite_autoincrement_type()},
                     username TEXT UNIQUE NOT NULL,
                     password_hash TEXT NOT NULL,
+                    avatar TEXT DEFAULT NULL,
                     created_at TEXT DEFAULT {db_now_expression()}
                 )
                 """
             )
         )
+        # 兼容旧表：如果avatar列不存在则添加
+        try:
+            conn.execute(text("ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT NULL"))
+        except Exception:
+            pass
         conn.execute(
             text(
                 f"""
@@ -409,10 +416,7 @@ def render_diary_card(row: pd.Series, keywords: list[str] | None = None) -> None
     content = highlight_content(str(row.get("content", "")), keywords=keywords)
     day_text = row["date"].strftime("%Y-%m-%d")
     time_text = str(row.get("time", "")).strip() or "未知时间"
-    meta = (
-        f"{day_text} {time_text} · ❤️ {int(row.get('likes', 0) or 0)} "
-        f"· 💬 {int(row.get('comments', 0) or 0)} · 🔁 {int(row.get('reposts', 0) or 0)}"
-    )
+    meta = f"{day_text} {time_text}"
     st.markdown(
         f"""
         <div class="diary-card">
@@ -437,6 +441,17 @@ def render_auth_panel() -> None:
             user = login_user(username, password)
             if user:
                 st.session_state["user"] = user
+                st.session_state["login_time"] = _time.time()
+                try:
+                    with ENGINE.begin() as conn:
+                        row = conn.execute(
+                            text("SELECT avatar FROM users WHERE id=:uid"),
+                            {"uid": user["id"]},
+                        ).mappings().fetchone()
+                        if row and row["avatar"]:
+                            st.session_state["avatar_b64"] = row["avatar"]
+                except Exception:
+                    pass
                 st.success("登录成功")
                 st.rerun()
             else:
@@ -499,17 +514,18 @@ def render_keyword_search(df: pd.DataFrame) -> None:
 
 def render_write_diary(user_id: int) -> None:
     st.markdown('<div class="section-title">✍️ 写日记</div>', unsafe_allow_html=True)
+    now = datetime.now()
     with st.form("write_diary_form", clear_on_submit=True):
         selected_day = st.date_input("日记日期", value=date.today(), format="YYYY-MM-DD")
-        selected_time = st.text_input("时间（HH:MM:SS）", value="21:00:00")
-        source_hint = st.text_input("来源", value="Streamlit日记")
+        default_time = now.strftime("%H:%M:%S")
+        selected_time = st.text_input("时间（HH:MM:SS）", value=default_time)
         content = st.text_area("内容", height=180)
         ok = st.form_submit_button("保存")
     if ok:
         if not content.strip():
             st.warning("内容不能为空。")
             return
-        success, msg = create_diary(user_id, selected_day, selected_time.strip(), content, source_hint)
+        success, msg = create_diary(user_id, selected_day, selected_time.strip(), content, "日记")
         if success:
             st.success(msg)
             st.rerun()
@@ -673,12 +689,54 @@ def render_import_panel(user_id: int) -> None:
             st.rerun()
 
 
+def check_session_timeout() -> bool:
+    """检查登录是否超时（10分钟）"""
+    login_time = st.session_state.get("login_time")
+    if login_time is None:
+        return False
+    if _time.time() - login_time > 600:
+        st.session_state.pop("user", None)
+        st.session_state.pop("login_time", None)
+        return False
+    return True
+
+
+def render_avatar_setting(user: dict) -> None:
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("**头像设置**")
+    avatar_b64 = st.session_state.get("avatar_b64")
+    if avatar_b64:
+        import base64
+        st.sidebar.image(base64.b64decode(avatar_b64), width=64)
+    uploaded = st.sidebar.file_uploader("上传头像", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+    if uploaded:
+        import base64
+        data = base64.b64encode(uploaded.read()).decode()
+        st.session_state["avatar_b64"] = data
+        try:
+            with ENGINE.begin() as conn:
+                conn.execute(
+                    text("UPDATE users SET avatar=:avatar WHERE id=:uid"),
+                    {"avatar": data, "uid": user["id"]},
+                )
+        except Exception:
+            pass
+        st.rerun()
+
+
 def render_sidebar(user: dict) -> None:
+    avatar_b64 = st.session_state.get("avatar_b64")
+    if avatar_b64:
+        import base64
+        st.sidebar.image(base64.b64decode(avatar_b64), width=64)
     st.sidebar.markdown(f"### 你好，`{user['username']}`")
     st.sidebar.caption("每个账号的数据独立隔离")
-    st.sidebar.info("手机访问：部署到公网后，手机浏览器打开网址即可。")
+    render_avatar_setting(user)
+    st.sidebar.markdown("---")
     if st.sidebar.button("退出登录", use_container_width=True):
         st.session_state.pop("user", None)
+        st.session_state.pop("login_time", None)
+        st.session_state.pop("avatar_b64", None)
         st.rerun()
 
 
@@ -687,7 +745,9 @@ def main() -> None:
     inject_styles()
 
     user = st.session_state.get("user")
-    if not user:
+    if not user or not check_session_timeout():
+        if user and not check_session_timeout():
+            st.warning("登录已超时，请重新登录。")
         render_auth_panel()
         return
 
