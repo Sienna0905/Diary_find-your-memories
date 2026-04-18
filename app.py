@@ -70,6 +70,7 @@ def sqlite_autoincrement_type() -> str:
 
 
 def init_db() -> None:
+    # 第一步：建表（独立事务）
     with ENGINE.begin() as conn:
         conn.execute(
             text(
@@ -84,11 +85,6 @@ def init_db() -> None:
                 """
             )
         )
-        # 兼容旧表：如果avatar列不存在则添加
-        try:
-            conn.execute(text("ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT NULL"))
-        except Exception:
-            pass
         conn.execute(
             text(
                 f"""
@@ -108,6 +104,12 @@ def init_db() -> None:
                 """
             )
         )
+    # 第二步：列迁移单独事务，失败不影响主流程
+    try:
+        with ENGINE.begin() as conn:
+            conn.execute(text("ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT NULL"))
+    except Exception:
+        pass
 
 
 def is_legacy_sha256(hash_value: str) -> bool:
