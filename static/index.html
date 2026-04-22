@@ -1,1 +1,687 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="记忆">
+<meta name="theme-color" content="#5B4636">
+<link rel="manifest" href="/manifest.json">
+<title>Find Your Memory</title>
+<style>
+  :root {
+    --bg: #FDF6E3;
+    --card: #FFFBF2;
+    --border: #F1E3C8;
+    --brown: #5B4636;
+    --brown-light: #8B6F5C;
+    --brown-muted: #9C7F63;
+    --accent: #E8A87C;
+    --hint-bg: #FFF3DD;
+    --hint-border: #E9D0A7;
+    --text: #4A3A2A;
+    --radius: 14px;
+    --shadow: 0 2px 12px rgba(181,137,85,.08);
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, 'PingFang SC', 'Hiragino Sans GB', sans-serif;
+         background: var(--bg); color: var(--text); min-height: 100vh; }
 
+  /* ── Layout ── */
+  .app { display: flex; flex-direction: column; min-height: 100vh; max-width: 680px;
+         margin: 0 auto; padding: 0 0 80px; }
+  .top-bar { display: flex; align-items: center; justify-content: space-between;
+             padding: 18px 20px 12px; position: sticky; top: 0; background: var(--bg);
+             z-index: 100; border-bottom: 1px solid var(--border); }
+  .logo { font-size: 1.1rem; font-weight: 700; color: var(--brown); }
+  .avatar-btn { width: 36px; height: 36px; border-radius: 50%; overflow: hidden;
+                border: 2px solid var(--border); cursor: pointer; background: var(--hint-bg);
+                display: flex; align-items: center; justify-content: center;
+                font-weight: 700; color: var(--brown); font-size: .9rem; flex-shrink: 0; }
+  .avatar-btn img { width: 100%; height: 100%; object-fit: cover; }
+
+  /* ── Nav tabs ── */
+  .nav { display: flex; gap: 0; background: var(--card); border-top: 1px solid var(--border);
+         position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; max-width: 680px;
+         margin: 0 auto; }
+  .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center;
+              padding: 10px 4px 12px; cursor: pointer; color: var(--brown-muted);
+              font-size: .68rem; gap: 4px; transition: color .15s; border: none;
+              background: transparent; }
+  .nav-item.active { color: var(--brown); }
+  .nav-item svg { width: 22px; height: 22px; }
+
+  /* ── Pages ── */
+  .page { display: none; padding: 20px 20px 0; animation: fadeIn .2s ease; }
+  .page.active { display: block; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* ── Cards ── */
+  .diary-card { background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+                padding: 14px 16px; margin-bottom: 12px; box-shadow: var(--shadow); }
+  .card-meta { color: var(--brown-muted); font-size: .82rem; margin-bottom: 8px;
+               display: flex; justify-content: space-between; align-items: center; }
+  .card-year { background: var(--hint-bg); border: 1px solid var(--hint-border);
+               border-radius: 20px; padding: 2px 10px; font-size: .75rem; color: var(--brown-light); }
+  .card-content { color: var(--text); line-height: 1.75; font-size: .95rem; word-break: break-word; }
+  .card-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .btn-small { font-size: .75rem; padding: 4px 12px; border-radius: 20px;
+               border: 1px solid var(--border); background: transparent;
+               color: var(--brown-light); cursor: pointer; }
+  .btn-small:hover { background: var(--hint-bg); }
+  .btn-small.danger { color: #c0392b; border-color: #f5c6c6; }
+  .btn-small.danger:hover { background: #fff5f5; }
+
+  /* ── Hint box ── */
+  .hint { background: var(--hint-bg); border: 1px dashed var(--hint-border);
+          border-radius: var(--radius); padding: 12px 14px; color: var(--brown-light);
+          font-size: .9rem; margin-bottom: 14px; }
+
+  /* ── Section title ── */
+  .section-title { font-size: 1.05rem; font-weight: 700; color: var(--brown);
+                   margin-bottom: 14px; display: flex; align-items: center; gap: 6px; }
+
+  /* ── Form elements ── */
+  .form-group { margin-bottom: 14px; }
+  .form-label { font-size: .82rem; color: var(--brown-muted); margin-bottom: 5px; display: block; }
+  input[type=text], input[type=password], input[type=date], textarea, select {
+    width: 100%; padding: 10px 13px; border: 1px solid var(--border);
+    border-radius: 10px; background: var(--card); color: var(--text);
+    font-size: .95rem; font-family: inherit; outline: none; transition: border .15s; }
+  input:focus, textarea:focus { border-color: var(--accent); }
+  textarea { resize: vertical; min-height: 140px; line-height: 1.7; }
+  .btn-primary { width: 100%; padding: 12px; background: var(--brown); color: #fff;
+                 border: none; border-radius: 10px; font-size: 1rem; font-weight: 600;
+                 cursor: pointer; transition: opacity .15s; }
+  .btn-primary:hover { opacity: .88; }
+  .btn-secondary { width: 100%; padding: 11px; background: transparent; color: var(--brown);
+                   border: 1px solid var(--border); border-radius: 10px; font-size: .95rem;
+                   cursor: pointer; }
+
+  /* ── Auth page ── */
+  .auth-wrap { min-height: 100vh; display: flex; flex-direction: column;
+               align-items: center; justify-content: center; padding: 24px; }
+  .auth-card { width: 100%; max-width: 360px; background: var(--card);
+               border: 1px solid var(--border); border-radius: 20px; padding: 28px 24px; }
+  .auth-logo { text-align: center; font-size: 1.5rem; font-weight: 700;
+               color: var(--brown); margin-bottom: 6px; }
+  .auth-sub { text-align: center; color: var(--brown-muted); font-size: .85rem; margin-bottom: 24px; }
+  .auth-tabs { display: flex; background: var(--bg); border-radius: 10px;
+               padding: 3px; margin-bottom: 20px; }
+  .auth-tab { flex: 1; text-align: center; padding: 8px; border-radius: 8px;
+              cursor: pointer; font-size: .9rem; color: var(--brown-muted); }
+  .auth-tab.active { background: var(--card); color: var(--brown); font-weight: 600;
+                     box-shadow: var(--shadow); }
+
+  /* ── Search bar ── */
+  .search-row { display: flex; gap: 8px; margin-bottom: 14px; }
+  .search-row input { flex: 1; }
+  .search-row button { padding: 10px 16px; border-radius: 10px; border: 1px solid var(--border);
+                       background: var(--brown); color: #fff; cursor: pointer; font-size: .9rem; }
+
+  /* ── Stats ── */
+  .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 16px; }
+  .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px;
+               padding: 12px; text-align: center; }
+  .stat-num { font-size: 1.5rem; font-weight: 700; color: var(--brown); }
+  .stat-label { font-size: .75rem; color: var(--brown-muted); margin-top: 3px; }
+
+  /* ── Calendar dots ── */
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-top: 10px; }
+  .cal-day { aspect-ratio: 1; border-radius: 8px; display: flex; align-items: center;
+             justify-content: center; font-size: .75rem; cursor: pointer; color: var(--brown-muted); }
+  .cal-day.has-entry { background: var(--accent); color: #fff; font-weight: 600; }
+  .cal-day.today { border: 2px solid var(--brown); }
+  .cal-day.empty { opacity: 0; pointer-events: none; }
+  .cal-header { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin-bottom: 4px; }
+  .cal-wday { text-align: center; font-size: .7rem; color: var(--brown-muted); padding: 4px 0; }
+  .cal-nav { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .cal-nav button { background: transparent; border: 1px solid var(--border); border-radius: 8px;
+                    padding: 5px 12px; cursor: pointer; color: var(--brown); }
+  .cal-month-label { font-weight: 600; color: var(--brown); }
+
+  /* ── Profile page ── */
+  .profile-avatar { width: 80px; height: 80px; border-radius: 50%; overflow: hidden;
+                    border: 3px solid var(--border); margin: 0 auto 12px;
+                    background: var(--hint-bg); display: flex; align-items: center;
+                    justify-content: center; font-size: 2rem; font-weight: 700; color: var(--brown); }
+  .profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .profile-name { text-align: center; font-size: 1.1rem; font-weight: 700;
+                  color: var(--brown); margin-bottom: 20px; }
+
+  /* ── Toast ── */
+  .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
+           background: var(--brown); color: #fff; padding: 10px 20px; border-radius: 20px;
+           font-size: .88rem; opacity: 0; transition: opacity .3s; pointer-events: none;
+           z-index: 999; white-space: nowrap; }
+  .toast.show { opacity: 1; }
+
+  /* ── Loading ── */
+  .loading { text-align: center; padding: 30px; color: var(--brown-muted); font-size: .9rem; }
+
+  /* ── Edit inline ── */
+  .edit-area { width: 100%; border: 1px solid var(--accent); border-radius: 8px;
+               padding: 8px; font-family: inherit; font-size: .95rem;
+               resize: vertical; min-height: 80px; margin-top: 8px; }
+
+  mark { background: #FFE6A7; padding: 0 2px; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<!-- ── Auth Screen ── -->
+<div id="auth-screen" class="auth-wrap">
+  <div class="auth-card">
+    <div class="auth-logo">📔 Find Your Memory</div>
+    <div class="auth-sub">记录生活，找回那年今日</div>
+    <div class="auth-tabs">
+      <div class="auth-tab active" onclick="switchAuthTab('login')">登录</div>
+      <div class="auth-tab" onclick="switchAuthTab('register')">注册</div>
+    </div>
+    <div id="login-form">
+      <div class="form-group">
+        <label class="form-label">用户名</label>
+        <input type="text" id="login-username" placeholder="输入用户名" autocomplete="username">
+      </div>
+      <div class="form-group">
+        <label class="form-label">密码</label>
+        <input type="password" id="login-password" placeholder="输入密码" autocomplete="current-password">
+      </div>
+      <button class="btn-primary" onclick="doLogin()">登录</button>
+    </div>
+    <div id="register-form" style="display:none">
+      <div class="form-group">
+        <label class="form-label">用户名</label>
+        <input type="text" id="reg-username" placeholder="设置用户名">
+      </div>
+      <div class="form-group">
+        <label class="form-label">密码（至少6位）</label>
+        <input type="password" id="reg-password" placeholder="设置密码">
+      </div>
+      <button class="btn-primary" onclick="doRegister()">创建账户</button>
+    </div>
+    <div id="auth-msg" style="margin-top:12px;font-size:.85rem;text-align:center;color:#c0392b;"></div>
+  </div>
+</div>
+
+<!-- ── Main App ── -->
+<div id="main-app" style="display:none">
+  <div class="app">
+    <div class="top-bar">
+      <div class="logo">📔 Find Your Memory</div>
+      <div class="avatar-btn" id="top-avatar" onclick="goPage('profile')"></div>
+    </div>
+
+    <!-- 那年今日 -->
+    <div class="page active" id="page-today">
+      <div class="section-title">🌟 那年今日</div>
+      <div id="today-content"><div class="loading">加载中...</div></div>
+    </div>
+
+    <!-- 日历 -->
+    <div class="page" id="page-calendar">
+      <div class="section-title">📅 日历</div>
+      <div class="cal-nav">
+        <button onclick="calMove(-1)">‹ 上月</button>
+        <span class="cal-month-label" id="cal-label"></span>
+        <button onclick="calMove(1)">下月 ›</button>
+      </div>
+      <div class="cal-header">
+        <div class="cal-wday">日</div><div class="cal-wday">一</div>
+        <div class="cal-wday">二</div><div class="cal-wday">三</div>
+        <div class="cal-wday">四</div><div class="cal-wday">五</div>
+        <div class="cal-wday">六</div>
+      </div>
+      <div class="cal-grid" id="cal-grid"></div>
+      <div id="cal-entries" style="margin-top:18px;"></div>
+    </div>
+
+    <!-- 搜索 -->
+    <div class="page" id="page-search">
+      <div class="section-title">🔎 搜索</div>
+      <div class="search-row">
+        <input type="text" id="search-input" placeholder="关键词搜索..." onkeydown="if(event.key==='Enter')doSearch()">
+        <button onclick="doSearch()">搜索</button>
+      </div>
+      <div id="search-results"></div>
+    </div>
+
+    <!-- 写日记 -->
+    <div class="page" id="page-write">
+      <div class="section-title">✍️ 写日记</div>
+      <div class="form-group">
+        <label class="form-label">日期</label>
+        <input type="date" id="write-date">
+      </div>
+      <div class="form-group">
+        <label class="form-label">内容</label>
+        <textarea id="write-content" placeholder="今天发生了什么..."></textarea>
+      </div>
+      <button class="btn-primary" onclick="saveDiary()">保存</button>
+    </div>
+
+    <!-- 我的 -->
+    <div class="page" id="page-profile">
+      <div class="profile-avatar" id="profile-avatar-circle"></div>
+      <div class="profile-name" id="profile-username"></div>
+
+      <div style="margin-bottom:20px;">
+        <div class="section-title" style="font-size:.95rem;">更换头像</div>
+        <input type="file" id="avatar-input" accept="image/*" style="display:none" onchange="uploadAvatar(this)">
+        <button class="btn-secondary" onclick="document.getElementById('avatar-input').click()">选择图片上传</button>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <div class="section-title" style="font-size:.95rem;">📥 导入历史日记</div>
+        <input type="file" id="import-input" accept=".json" style="display:none" onchange="importJSON(this)">
+        <button class="btn-secondary" onclick="document.getElementById('import-input').click()">上传 JSON 文件</button>
+        <div id="import-msg" style="margin-top:8px;font-size:.85rem;color:var(--brown-muted);"></div>
+      </div>
+
+      <div style="margin-bottom:20px;">
+        <div class="section-title" style="font-size:.95rem;">📊 本月统计</div>
+        <div class="stats-grid" id="monthly-stats"></div>
+      </div>
+
+      <button class="btn-secondary" style="margin-top:8px;" onclick="doLogout()">退出登录</button>
+    </div>
+  </div>
+
+  <!-- Bottom nav -->
+  <nav class="nav">
+    <button class="nav-item active" onclick="goPage('today')" id="nav-today">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+        <polyline points="9,22 9,12 15,12 15,22"/>
+      </svg>
+      今日
+    </button>
+    <button class="nav-item" onclick="goPage('calendar')" id="nav-calendar">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/>
+        <line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>
+      </svg>
+      日历
+    </button>
+    <button class="nav-item" onclick="goPage('search')" id="nav-search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      搜索
+    </button>
+    <button class="nav-item" onclick="goPage('write')" id="nav-write">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z"/>
+      </svg>
+      写日记
+    </button>
+    <button class="nav-item" onclick="goPage('profile')" id="nav-profile">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+        <path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/>
+        <circle cx="12" cy="7" r="4"/>
+      </svg>
+      我的
+    </button>
+  </nav>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ── State ──────────────────────────────────────────────────────────
+let currentUser = null;
+let calYear, calMonth;
+let calEntryDates = new Set();
+
+// ── Init ──────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  const now = new Date();
+  calYear = now.getFullYear();
+  calMonth = now.getMonth() + 1;
+  document.getElementById('write-date').value = toDateStr(now);
+  await checkAuth();
+});
+
+async function checkAuth() {
+  const res = await api('/api/me');
+  if (res.loggedIn) {
+    currentUser = res;
+    showApp();
+  } else {
+    showAuth();
+  }
+}
+
+// ── Auth ──────────────────────────────────────────────────────────
+function showAuth() {
+  document.getElementById('auth-screen').style.display = 'flex';
+  document.getElementById('main-app').style.display = 'none';
+}
+
+function showApp() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('main-app').style.display = 'block';
+  renderTopAvatar();
+  loadToday();
+  loadMonthlyStats();
+}
+
+function switchAuthTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach((el, i) => {
+    el.classList.toggle('active', (i === 0) === (tab === 'login'));
+  });
+  document.getElementById('login-form').style.display = tab === 'login' ? 'block' : 'none';
+  document.getElementById('register-form').style.display = tab === 'register' ? 'block' : 'none';
+  document.getElementById('auth-msg').textContent = '';
+}
+
+async function doLogin() {
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+  if (!username || !password) return setAuthMsg('请填写用户名和密码');
+  const res = await api('/api/login', 'POST', { username, password });
+  if (res.error) return setAuthMsg(res.error);
+  currentUser = res;
+  showApp();
+}
+
+async function doRegister() {
+  const username = document.getElementById('reg-username').value.trim();
+  const password = document.getElementById('reg-password').value;
+  if (!username || !password) return setAuthMsg('请填写用户名和密码');
+  const res = await api('/api/register', 'POST', { username, password });
+  if (res.error) return setAuthMsg(res.error);
+  setAuthMsg('注册成功，请登录 ✓', true);
+  switchAuthTab('login');
+}
+
+async function doLogout() {
+  await api('/api/logout', 'POST');
+  currentUser = null;
+  showAuth();
+}
+
+function setAuthMsg(msg, ok = false) {
+  const el = document.getElementById('auth-msg');
+  el.textContent = msg;
+  el.style.color = ok ? '#27ae60' : '#c0392b';
+}
+
+// ── Navigation ────────────────────────────────────────────────────
+function goPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.getElementById(`page-${name}`).classList.add('active');
+  document.getElementById(`nav-${name}`).classList.add('active');
+  if (name === 'calendar') renderCalendar();
+  if (name === 'profile') renderProfile();
+  if (name === 'write') {
+    const now = new Date();
+    document.getElementById('write-date').value = toDateStr(now);
+  }
+}
+
+// ── Today ─────────────────────────────────────────────────────────
+async function loadToday() {
+  const el = document.getElementById('today-content');
+  el.innerHTML = '<div class="loading">正在找回记忆...</div>';
+  const data = await api('/api/diaries/today');
+  if (data.error) { el.innerHTML = `<div class="hint">${data.error}</div>`; return; }
+  if (!data.length) {
+    el.innerHTML = '<div class="hint">今天暂无历史记录，去写一篇吧～</div>';
+    return;
+  }
+  const today = new Date();
+  el.innerHTML = `<div class="hint">找到 <b>${data.length}</b> 段记忆 ✨</div>` +
+    data.map(d => diaryCard(d, today.getFullYear())).join('');
+}
+
+// ── Diary Card ────────────────────────────────────────────────────
+function diaryCard(d, currentYear, keywords = []) {
+  const yearDiff = currentYear - parseInt(d.date.slice(0, 4));
+  const yearBadge = yearDiff > 0 ? `<span class="card-year">${d.date.slice(0,4)}年 · ${yearDiff}年前</span>` : '';
+  let content = escHtml(d.content).replace(/\n/g, '<br>');
+  if (keywords.length) {
+    keywords.forEach(kw => {
+      const re = new RegExp(escRe(escHtml(kw)), 'gi');
+      content = content.replace(re, m => `<mark>${m}</mark>`);
+    });
+  }
+  const time = d.time ? d.time.slice(0, 5) : '';
+  return `
+    <div class="diary-card" id="card-${d.id}">
+      <div class="card-meta">
+        <span>${d.date} ${time}</span>
+        ${yearBadge}
+      </div>
+      <div class="card-content" id="content-${d.id}">${content}</div>
+      <div class="card-actions">
+        <button class="btn-small" onclick="toggleEdit(${d.id}, ${JSON.stringify(d.content)})">编辑</button>
+        <button class="btn-small danger" onclick="deleteDiary(${d.id})">删除</button>
+      </div>
+    </div>`;
+}
+
+// ── Write ─────────────────────────────────────────────────────────
+async function saveDiary() {
+  const content = document.getElementById('write-content').value.trim();
+  const date = document.getElementById('write-date').value;
+  if (!content) return toast('内容不能为空');
+  const now = new Date();
+  const time = `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+  const res = await api('/api/diaries', 'POST', { content, date, time });
+  if (res.error) return toast(res.error);
+  toast('保存成功 ✓');
+  document.getElementById('write-content').value = '';
+  loadToday();
+}
+
+// ── Edit / Delete ─────────────────────────────────────────────────
+function toggleEdit(id, originalContent) {
+  const contentEl = document.getElementById(`content-${id}`);
+  const existing = document.getElementById(`edit-${id}`);
+  if (existing) { existing.remove(); return; }
+  const ta = document.createElement('textarea');
+  ta.className = 'edit-area';
+  ta.id = `edit-${id}`;
+  ta.value = originalContent;
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn-small';
+  saveBtn.textContent = '保存修改';
+  saveBtn.style.marginTop = '6px';
+  saveBtn.onclick = async () => {
+    const res = await api(`/api/diaries/${id}`, 'PUT', { content: ta.value });
+    if (res.error) return toast(res.error);
+    toast('修改成功 ✓');
+    contentEl.innerHTML = escHtml(ta.value).replace(/\n/g, '<br>');
+    ta.remove(); saveBtn.remove();
+  };
+  contentEl.after(ta);
+  ta.after(saveBtn);
+  ta.focus();
+}
+
+async function deleteDiary(id) {
+  if (!confirm('确定删除这条日记吗？')) return;
+  const res = await api(`/api/diaries/${id}`, 'DELETE');
+  if (res.error) return toast(res.error);
+  document.getElementById(`card-${id}`)?.remove();
+  toast('已删除');
+}
+
+// ── Calendar ──────────────────────────────────────────────────────
+async function renderCalendar() {
+  document.getElementById('cal-label').textContent = `${calYear}年${calMonth}月`;
+  const monthStr = `${calYear}-${pad(calMonth)}`;
+  const data = await api(`/api/stats/monthly?month=${monthStr}`);
+  calEntryDates = new Set((data || []).map(r => r.date));
+
+  const grid = document.getElementById('cal-grid');
+  grid.innerHTML = '';
+  const firstDay = new Date(calYear, calMonth - 1, 1).getDay();
+  const daysInMonth = new Date(calYear, calMonth, 0).getDate();
+  const today = toDateStr(new Date());
+
+  for (let i = 0; i < firstDay; i++) {
+    const el = document.createElement('div');
+    el.className = 'cal-day empty';
+    grid.appendChild(el);
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dateStr = `${calYear}-${pad(calMonth)}-${pad(d)}`;
+    const el = document.createElement('div');
+    el.className = 'cal-day' + (calEntryDates.has(dateStr) ? ' has-entry' : '') + (dateStr === today ? ' today' : '');
+    el.textContent = d;
+    el.onclick = () => loadCalendarDay(dateStr);
+    grid.appendChild(el);
+  }
+  document.getElementById('cal-entries').innerHTML = '';
+}
+
+function calMove(dir) {
+  calMonth += dir;
+  if (calMonth > 12) { calMonth = 1; calYear++; }
+  if (calMonth < 1) { calMonth = 12; calYear--; }
+  renderCalendar();
+}
+
+async function loadCalendarDay(dateStr) {
+  const el = document.getElementById('cal-entries');
+  el.innerHTML = `<div class="section-title" style="margin-top:4px;">${dateStr} 的记录</div><div class="loading">加载中...</div>`;
+  const data = await api(`/api/diaries/date/${dateStr}`);
+  if (!data.length) { el.innerHTML += '<div class="hint">这天没有记录</div>'; return; }
+  const cy = new Date().getFullYear();
+  el.innerHTML = `<div class="section-title" style="margin-top:4px;">${dateStr} 的记录</div>` +
+    data.map(d => diaryCard(d, cy)).join('');
+}
+
+// ── Search ────────────────────────────────────────────────────────
+async function doSearch() {
+  const q = document.getElementById('search-input').value.trim();
+  const el = document.getElementById('search-results');
+  if (!q) { el.innerHTML = '<div class="hint">请输入关键词</div>'; return; }
+  el.innerHTML = '<div class="loading">搜索中...</div>';
+  const data = await api(`/api/diaries/search?q=${encodeURIComponent(q)}`);
+  if (!data.length) { el.innerHTML = '<div class="hint">没有找到相关记录</div>'; return; }
+  const cy = new Date().getFullYear();
+  const keywords = q.split(/\s+/).filter(Boolean);
+  el.innerHTML = `<div class="hint">找到 <b>${data.length}</b> 条</div>` +
+    data.map(d => diaryCard(d, cy, keywords)).join('');
+}
+
+// ── Profile ───────────────────────────────────────────────────────
+function renderProfile() {
+  const circle = document.getElementById('profile-avatar-circle');
+  const name = document.getElementById('profile-username');
+  name.textContent = currentUser?.username || '';
+  if (currentUser?.avatar) {
+    circle.innerHTML = `<img src="data:image/jpeg;base64,${currentUser.avatar}" alt="avatar">`;
+  } else {
+    circle.textContent = (currentUser?.username || '?')[0].toUpperCase();
+  }
+  loadMonthlyStats();
+}
+
+function renderTopAvatar() {
+  const el = document.getElementById('top-avatar');
+  if (currentUser?.avatar) {
+    el.innerHTML = `<img src="data:image/jpeg;base64,${currentUser.avatar}" alt="">`;
+  } else {
+    el.textContent = (currentUser?.username || '?')[0].toUpperCase();
+  }
+}
+
+async function uploadAvatar(input) {
+  const file = input.files[0];
+  if (!file) return;
+  if (file.size > 1024 * 1024) return toast('图片不能超过 1MB');
+  const b64 = await toBase64(file);
+  const data = b64.split(',')[1];
+  const res = await api('/api/avatar', 'POST', { avatar: data });
+  if (res.error) return toast(res.error);
+  currentUser.avatar = data;
+  renderTopAvatar();
+  renderProfile();
+  toast('头像已更新 ✓');
+  input.value = '';
+}
+
+async function loadMonthlyStats() {
+  const now = new Date();
+  const month = `${now.getFullYear()}-${pad(now.getMonth() + 1)}`;
+  const data = await api(`/api/stats/monthly?month=${month}`);
+  const el = document.getElementById('monthly-stats');
+  if (!data || data.error) { el.innerHTML = ''; return; }
+  const total = data.reduce((s, r) => s + r.count, 0);
+  const activeDays = data.length;
+  const maxDay = data.reduce((m, r) => Math.max(m, r.count), 0);
+  el.innerHTML = `
+    <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-label">本月条数</div></div>
+    <div class="stat-card"><div class="stat-num">${activeDays}</div><div class="stat-label">活跃天数</div></div>
+    <div class="stat-card"><div class="stat-num">${maxDay}</div><div class="stat-label">单日最高</div></div>`;
+}
+
+async function importJSON(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const msg = document.getElementById('import-msg');
+  msg.textContent = '导入中...';
+  try {
+    const text = await file.text();
+    const records = JSON.parse(text);
+    const res = await api('/api/diaries/import', 'POST', records);
+    if (res.error) { msg.textContent = '导入失败：' + res.error; return; }
+    msg.textContent = `导入完成，新增 ${res.inserted} 条 ✓`;
+    toast(`新增 ${res.inserted} 条 ✓`);
+    loadToday();
+  } catch (e) {
+    msg.textContent = '文件格式错误';
+  }
+  input.value = '';
+}
+
+// ── Utils ─────────────────────────────────────────────────────────
+async function api(url, method = 'GET', body = null) {
+  try {
+    const opts = { method, headers: { 'Content-Type': 'application/json' }, credentials: 'include' };
+    if (body !== null) opts.body = JSON.stringify(body);
+    const res = await fetch(url, opts);
+    return await res.json();
+  } catch (e) {
+    return { error: '网络错误' };
+  }
+}
+
+function toast(msg, dur = 2200) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), dur);
+}
+
+function toDateStr(d) {
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+}
+
+function pad(n) { return String(n).padStart(2, '0'); }
+function escHtml(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function toBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+// ── Service Worker ────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
