@@ -63,6 +63,7 @@ def init_db():
     for sql in [
         "ALTER TABLE users ADD COLUMN avatar TEXT DEFAULT NULL",
         "ALTER TABLE diaries ADD COLUMN source TEXT DEFAULT '日记'",
+        "ALTER TABLE diaries ADD COLUMN images TEXT DEFAULT NULL",
     ]:
         try:
             with ENGINE.begin() as conn:
@@ -187,7 +188,7 @@ def today_memories():
     month, day = now.month, now.day
     with ENGINE.begin() as conn:
         rows = conn.execute(text("""
-            SELECT id, date, time, content
+            SELECT id, date, time, content, images
             FROM diaries
             WHERE user_id=:uid
               AND CAST(SPLIT_PART(date, '-', 2) AS INTEGER)=:month
@@ -205,7 +206,7 @@ def search_diaries():
     date_to = request.args.get("to", "")
     uid = current_user_id()
 
-    sql = "SELECT id, date, time, content FROM diaries WHERE user_id=:uid"
+    sql = "SELECT id, date, time, content, images FROM diaries WHERE user_id=:uid"
     params = {"uid": uid}
 
     if keyword:
@@ -230,7 +231,7 @@ def search_diaries():
 def diaries_by_date(date_str):
     with ENGINE.begin() as conn:
         rows = conn.execute(text("""
-            SELECT id, date, time, content FROM diaries
+            SELECT id, date, time, content, images FROM diaries
             WHERE user_id=:uid AND date=:d
             ORDER BY time ASC
         """), {"uid": current_user_id(), "d": date_str}).mappings().all()
@@ -247,11 +248,12 @@ def create_diary():
     now_cn = datetime.now(TZ_CN)
     d = data.get("date") or now_cn.strftime("%Y-%m-%d")
     t = data.get("time") or now_cn.strftime("%H:%M:%S")
+    images = data.get("images") or None  # JSON array string
     with ENGINE.begin() as conn:
         conn.execute(text("""
-            INSERT INTO diaries (user_id, date, time, content, source)
-            VALUES (:uid, :d, :t, :c, :s)
-        """), {"uid": current_user_id(), "d": d, "t": t, "c": content, "s": "日记"})
+            INSERT INTO diaries (user_id, date, time, content, source, images)
+            VALUES (:uid, :d, :t, :c, :s, :img)
+        """), {"uid": current_user_id(), "d": d, "t": t, "c": content, "s": "日记", "img": images})
     return jsonify({"ok": True})
 
 
@@ -262,10 +264,16 @@ def update_diary(diary_id):
     content = (data.get("content") or "").strip()
     if not content:
         return jsonify({"error": "内容不能为空"}), 400
+    images = data.get("images")  # None = don't change; string = update
     with ENGINE.begin() as conn:
-        result = conn.execute(text("""
-            UPDATE diaries SET content=:c WHERE id=:id AND user_id=:uid
-        """), {"c": content, "id": diary_id, "uid": current_user_id()})
+        if images is not None:
+            result = conn.execute(text("""
+                UPDATE diaries SET content=:c, images=:img WHERE id=:id AND user_id=:uid
+            """), {"c": content, "id": diary_id, "uid": current_user_id(), "img": images})
+        else:
+            result = conn.execute(text("""
+                UPDATE diaries SET content=:c WHERE id=:id AND user_id=:uid
+            """), {"c": content, "id": diary_id, "uid": current_user_id()})
     if result.rowcount == 0:
         return jsonify({"error": "未找到"}), 404
     return jsonify({"ok": True})
