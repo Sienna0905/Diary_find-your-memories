@@ -191,10 +191,9 @@ def today_memories():
             SELECT id, date, time, content, images
             FROM diaries
             WHERE user_id=:uid
-              AND CAST(SPLIT_PART(date, '-', 2) AS INTEGER)=:month
-              AND CAST(SPLIT_PART(date, '-', 3) AS INTEGER)=:day
+              AND date LIKE :pattern
             ORDER BY date DESC, time DESC
-        """), {"uid": current_user_id(), "month": month, "day": day}).mappings().all()
+        """), {"uid": current_user_id(), "pattern": f"%-{month:02d}-{day:02d}"}).mappings().all()
     return jsonify([dict(r) for r in rows])
 
 
