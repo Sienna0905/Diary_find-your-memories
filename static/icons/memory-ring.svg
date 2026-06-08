@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Find Your Memory</title>
+  <desc id="desc">A warm memory loop returning to today.</desc>
+  <rect width="1024" height="1024" rx="224" fill="#FFF2DE"/>
+  <circle cx="512" cy="512" r="330" fill="#FFE4B8"/>
+  <circle cx="512" cy="512" r="234" fill="#FFF8EA"/>
+  <path d="M512 208c168 0 304 136 304 304 0 58-16 112-44 158" fill="none" stroke="#A65F3D" stroke-width="64" stroke-linecap="round"/>
+  <path d="M512 816c-168 0-304-136-304-304 0-58 16-112 44-158" fill="none" stroke="#DFA36F" stroke-width="64" stroke-linecap="round"/>
+  <path d="M770 666l24 118 100-68" fill="none" stroke="#A65F3D" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M254 358l-24-118-100 68" fill="none" stroke="#DFA36F" stroke-width="56" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="512" cy="512" r="112" fill="#E89A5B"/>
+  <circle cx="512" cy="512" r="46" fill="#FFF8EA"/>
+  <path d="M512 374v74M512 576v74M374 512h74M576 512h74" stroke="#C87543" stroke-width="34" stroke-linecap="round"/>
+  <circle cx="512" cy="238" r="20" fill="#8E5138"/>
+  <circle cx="786" cy="512" r="20" fill="#8E5138"/>
+  <circle cx="512" cy="786" r="20" fill="#8E5138"/>
+  <circle cx="238" cy="512" r="20" fill="#8E5138"/>
+</svg>

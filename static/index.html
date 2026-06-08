@@ -8,6 +8,8 @@
 <meta name="apple-mobile-web-app-title" content="记忆">
 <meta name="theme-color" content="#5B4636">
 <link rel="manifest" href="/manifest.json">
+<link rel="icon" href="/icons/memory-ring.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/icons/memory-ring-180.png">
 <title>Find Your Memory</title>
 <style>
   :root {
@@ -68,7 +70,9 @@
   .card-year { background: var(--hint-bg); border: 1px solid var(--hint-border);
                border-radius: 20px; padding: 2px 10px; font-size: .75rem; color: var(--brown-light); }
   .card-content { color: var(--text); line-height: 1.75; font-size: .95rem; word-break: break-word; }
+  .card-manage { display: flex; justify-content: flex-end; margin-top: 10px; }
   .card-actions { display: flex; gap: 8px; margin-top: 10px; }
+  .card-actions.collapsed { display: none; }
   .btn-small { font-size: .75rem; padding: 4px 12px; border-radius: 20px;
                border: 1px solid var(--border); background: transparent;
                color: var(--brown-light); cursor: pointer; }
@@ -156,6 +160,13 @@
                  gap: 12px; margin-bottom: 20px; }
   .setting-row .form-label { margin-bottom: 0; }
   .setting-row select { width: auto; min-width: 130px; flex-shrink: 0; }
+  .theme-control { display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+                   justify-content: flex-end; }
+  .theme-swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--border);
+                  cursor: pointer; background: var(--swatch); }
+  .theme-swatch.active { border-color: var(--brown); box-shadow: 0 0 0 2px var(--hint-bg); }
+  .theme-color-input { width: 32px; height: 32px; padding: 0; border-radius: 50%;
+                       overflow: hidden; cursor: pointer; }
 
   /* ── Toast ── */
   .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%);
@@ -299,6 +310,17 @@
         </select>
       </div>
 
+      <div class="setting-row">
+        <label class="form-label" for="theme-color-input">主题色</label>
+        <div class="theme-control" id="theme-control">
+          <button class="theme-swatch" style="--swatch:#5B4636" onclick="changeThemeColor('#5B4636')" aria-label="暖棕"></button>
+          <button class="theme-swatch" style="--swatch:#A65F3D" onclick="changeThemeColor('#A65F3D')" aria-label="日落"></button>
+          <button class="theme-swatch" style="--swatch:#4F6F64" onclick="changeThemeColor('#4F6F64')" aria-label="松绿"></button>
+          <button class="theme-swatch" style="--swatch:#9B5B68" onclick="changeThemeColor('#9B5B68')" aria-label="玫瑰"></button>
+          <input class="theme-color-input" type="color" id="theme-color-input" value="#5B4636" onchange="changeThemeColor(this.value)" aria-label="自定义主题色">
+        </div>
+      </div>
+
       <div style="margin-bottom:20px;">
         <div class="section-title" style="font-size:.95rem;">更换头像</div>
         <input type="file" id="avatar-input" accept="image/*" style="display:none" onchange="uploadAvatar(this)">
@@ -367,6 +389,7 @@ let currentUser = null;
 let calYear, calMonth;
 let calEntryDates = new Set();
 const FONT_PREF_KEY = 'fym-font';
+const THEME_PREF_KEY = 'fym-theme-color';
 
 // ── Init ──────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
@@ -374,6 +397,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   calYear = now.getFullYear();
   calMonth = now.getMonth() + 1;
   applyFontPreference(localStorage.getItem(FONT_PREF_KEY) || 'system');
+  applyThemeColor(localStorage.getItem(THEME_PREF_KEY) || '#5B4636');
   document.getElementById('write-date').value = toDateStr(now);
   await checkAuth();
 });
@@ -494,11 +518,18 @@ function diaryCard(d, currentYear, keywords = []) {
       </div>
       <div class="card-content" id="content-${d.id}">${content}</div>
       ${imgHtml}
-      <div class="card-actions">
+      <div class="card-manage">
+        <button class="btn-small" onclick="toggleCardActions(${d.id})">管理</button>
+      </div>
+      <div class="card-actions collapsed" id="actions-${d.id}">
         <button class="btn-small" onclick="toggleEdit(${d.id})">编辑</button>
         <button class="btn-small danger" onclick="deleteDiary(${d.id})">删除</button>
       </div>
     </div>`;
+}
+
+function toggleCardActions(id) {
+  document.getElementById(`actions-${id}`)?.classList.toggle('collapsed');
 }
 
 // ── Write ─────────────────────────────────────────────────────────
@@ -714,8 +745,11 @@ function renderProfile() {
   const circle = document.getElementById('profile-avatar-circle');
   const name = document.getElementById('profile-username');
   const fontSelect = document.getElementById('font-select');
+  const themeInput = document.getElementById('theme-color-input');
   name.textContent = currentUser?.username || '';
   if (fontSelect) fontSelect.value = localStorage.getItem(FONT_PREF_KEY) || 'system';
+  if (themeInput) themeInput.value = localStorage.getItem(THEME_PREF_KEY) || '#5B4636';
+  markActiveThemeSwatch();
   if (currentUser?.avatar) {
     circle.innerHTML = `<img src="data:image/jpeg;base64,${currentUser.avatar}" alt="avatar">`;
   } else {
@@ -733,6 +767,26 @@ function changeFontPreference(value) {
   localStorage.setItem(FONT_PREF_KEY, nextValue);
   applyFontPreference(nextValue);
   toast('字体已更新 ✓');
+}
+
+function applyThemeColor(color) {
+  document.documentElement.style.setProperty('--brown', color);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color);
+  markActiveThemeSwatch(color);
+}
+
+function changeThemeColor(color) {
+  localStorage.setItem(THEME_PREF_KEY, color);
+  applyThemeColor(color);
+  const themeInput = document.getElementById('theme-color-input');
+  if (themeInput) themeInput.value = color;
+  toast('主题色已更新 ✓');
+}
+
+function markActiveThemeSwatch(color = localStorage.getItem(THEME_PREF_KEY) || '#5B4636') {
+  document.querySelectorAll('.theme-swatch').forEach(btn => {
+    btn.classList.toggle('active', btn.style.getPropertyValue('--swatch').toLowerCase() === color.toLowerCase());
+  });
 }
 
 function renderTopAvatar() {

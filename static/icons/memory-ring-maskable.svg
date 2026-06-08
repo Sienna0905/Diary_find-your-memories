@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Find Your Memory maskable icon</title>
+  <desc id="desc">A warm memory loop returning to today with extra safe padding.</desc>
+  <rect width="1024" height="1024" fill="#FFF2DE"/>
+  <circle cx="512" cy="512" r="300" fill="#FFE4B8"/>
+  <circle cx="512" cy="512" r="210" fill="#FFF8EA"/>
+  <path d="M512 238c151 0 274 123 274 274 0 52-15 101-40 142" fill="none" stroke="#A65F3D" stroke-width="58" stroke-linecap="round"/>
+  <path d="M512 786c-151 0-274-123-274-274 0-52 15-101 40-142" fill="none" stroke="#DFA36F" stroke-width="58" stroke-linecap="round"/>
+  <path d="M744 650l22 106 90-61" fill="none" stroke="#A65F3D" stroke-width="50" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M280 374l-22-106-90 61" fill="none" stroke="#DFA36F" stroke-width="50" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle cx="512" cy="512" r="98" fill="#E89A5B"/>
+  <circle cx="512" cy="512" r="40" fill="#FFF8EA"/>
+  <path d="M512 392v58M512 574v58M392 512h58M574 512h58" stroke="#C87543" stroke-width="30" stroke-linecap="round"/>
+</svg>
