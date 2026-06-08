@@ -95,11 +95,16 @@
   .mode-tab { flex: 1; border: none; border-radius: 9px; padding: 8px 6px; background: transparent;
               color: var(--brown-muted); font-size: .82rem; font-family: inherit; cursor: pointer; }
   .mode-tab.active { background: var(--brown); color: #fff; font-weight: 700; }
-  .today-deck { position: relative; min-height: 300px; margin-bottom: 12px; }
-  .deck-card { display: none; }
-  .deck-card.active { display: block; animation: fadeIn .18s ease; }
-  .deck-nav { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
-  .deck-count { color: var(--brown-muted); font-size: .82rem; }
+  .today-deck { column-count: 2; column-gap: 10px; margin-bottom: 12px; }
+  .deck-card { display: inline-block; width: 100%; break-inside: avoid; background: var(--card);
+               border: 1px solid var(--border); border-radius: var(--radius); padding: 13px;
+               margin: 0 0 10px; box-shadow: var(--shadow); cursor: pointer; }
+  .deck-card .card-meta { align-items: flex-start; gap: 8px; }
+  .deck-preview { color: var(--text); line-height: 1.65; font-size: .9rem; word-break: break-word;
+                  display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+  .deck-card.expanded .deck-preview { display: block; overflow: visible; }
+  .deck-hint { color: var(--brown-muted); font-size: .72rem; margin-top: 9px; }
+  @media (max-width: 460px) { .today-deck { column-count: 1; } }
   .recall-card { background: var(--card); border: 1px dashed var(--hint-border); border-radius: var(--radius);
                  padding: 16px; margin-bottom: 12px; box-shadow: var(--shadow); cursor: pointer; }
   .recall-card.revealed { border-style: solid; cursor: default; }
@@ -428,7 +433,6 @@ const FONT_PREF_KEY = 'fym-font';
 const THEME_PREF_KEY = 'fym-theme-color';
 const TODAY_MODE_KEY = 'fym-today-mode';
 let todayEntries = [];
-let todayDeckIndex = 0;
 
 // ── Init ──────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', async () => {
@@ -527,7 +531,6 @@ async function loadToday() {
   const data = await api('/api/diaries/today');
   if (data.error) { el.innerHTML = `<div class="hint">${data.error}</div>`; return; }
   todayEntries = Array.isArray(data) ? data : [];
-  todayDeckIndex = 0;
   if (!data.length) {
     el.innerHTML = '<div class="hint">今天暂无历史记录，去写一篇吧～</div>';
     return;
@@ -547,8 +550,7 @@ function renderToday() {
     return;
   }
   if (mode === 'deck') {
-    todayDeckIndex = Math.min(todayDeckIndex, todayEntries.length - 1);
-    el.innerHTML = `<div class="hint">找到 <b>${todayEntries.length}</b> 段记忆 ✨</div>` +
+    el.innerHTML = `<div class="hint">找到 <b>${todayEntries.length}</b> 段记忆，点开卡片看完整内容。</div>` +
       todayDeck(todayEntries, today.getFullYear());
     return;
   }
@@ -564,27 +566,32 @@ function renderToday() {
 function setTodayMode(mode) {
   const nextMode = ['list', 'deck', 'recall'].includes(mode) ? mode : 'list';
   localStorage.setItem(TODAY_MODE_KEY, nextMode);
-  todayDeckIndex = 0;
   renderToday();
 }
 
 function todayDeck(entries, currentYear) {
-  const cards = entries.map((d, i) =>
-    `<div class="deck-card ${i === todayDeckIndex ? 'active' : ''}">${diaryCard(d, currentYear)}</div>`
-  ).join('');
+  return `<div class="today-deck">${entries.map(d => deckPreviewCard(d, currentYear)).join('')}</div>`;
+}
+
+function deckPreviewCard(d, currentYear) {
+  const time = d.time ? d.time.slice(0, 5) : '';
+  const yearDiff = currentYear - parseInt(d.date.slice(0, 4));
+  const yearBadge = yearDiff > 0 ? `<span class="card-year"><strong>${d.date.slice(0,4)}</strong>年 · ${yearDiff}年前</span>` : '';
   return `
-    <div class="today-deck">${cards}</div>
-    <div class="deck-nav">
-      <button class="btn-small" onclick="moveTodayDeck(-1)">上一张</button>
-      <span class="deck-count">${todayDeckIndex + 1} / ${entries.length}</span>
-      <button class="btn-small" onclick="moveTodayDeck(1)">下一张</button>
+    <div class="deck-card" onclick="toggleDeckCard(this)">
+      <div class="card-meta">
+        <span>${formatDateWithBoldYear(d.date)} ${time}</span>
+        ${yearBadge}
+      </div>
+      <div class="deck-preview">${escHtml(d.content).replace(/\n/g, '<br>')}</div>
+      <div class="deck-hint">点击展开</div>
     </div>`;
 }
 
-function moveTodayDeck(dir) {
-  if (!todayEntries.length) return;
-  todayDeckIndex = (todayDeckIndex + dir + todayEntries.length) % todayEntries.length;
-  renderToday();
+function toggleDeckCard(card) {
+  card.classList.toggle('expanded');
+  const hint = card.querySelector('.deck-hint');
+  if (hint) hint.textContent = card.classList.contains('expanded') ? '点击收起' : '点击展开';
 }
 
 function recallCard(d, currentYear) {
@@ -634,7 +641,13 @@ function extractMemoryKeywords(content) {
     }
   });
   const words = [...scores.entries()].sort((a, b) => b[1] - a[1]).map(([word]) => word);
-  return words.slice(0, 4).length ? words.slice(0, 4) : ['那天', '记忆', '心情'];
+  const uniqueWords = [];
+  for (const word of words) {
+    if (uniqueWords.some(existing => existing === word || existing.includes(word) || word.includes(existing))) continue;
+    uniqueWords.push(word);
+    if (uniqueWords.length >= 4) break;
+  }
+  return uniqueWords.length ? uniqueWords : ['那天', '记忆', '心情'];
 }
 
 function imageHtml(d) {
