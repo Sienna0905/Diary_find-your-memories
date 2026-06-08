@@ -4,11 +4,11 @@ services:
     runtime: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run app.py --server.address 0.0.0.0 --server.port $PORT
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 60
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.9
       - key: DATABASE_URL
         sync: false
-      - key: DB_PATH
-        value: /tmp/diary_app.db
+      - key: SECRET_KEY
+        generateValue: true

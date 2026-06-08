@@ -73,6 +73,27 @@ def init_db():
 
 
 # ── 认证工具 ──────────────────────────────────────────────────────
+DB_INITIALIZED = False
+
+
+def ensure_db():
+    global DB_INITIALIZED
+    if not DB_INITIALIZED:
+        init_db()
+        DB_INITIALIZED = True
+
+
+@app.before_request
+def ensure_api_db():
+    if not request.path.startswith("/api/"):
+        return None
+    try:
+        ensure_db()
+    except Exception:
+        return jsonify({"error": "数据库暂时不可用，请确认 Supabase 项目已恢复"}), 503
+    return None
+
+
 def password_hash(raw: str) -> str:
     return bcrypt.hashpw(raw.encode(), bcrypt.gensalt()).decode()
 
@@ -346,5 +367,4 @@ def serve(path):
 
 
 if __name__ == "__main__":
-    init_db()
     app.run(debug=True, port=5000)

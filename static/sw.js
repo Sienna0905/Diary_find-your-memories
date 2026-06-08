@@ -1,4 +1,4 @@
-const CACHE = 'fym-v1';
+const CACHE = 'fym-v2';
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(['/'])));
   self.skipWaiting();
