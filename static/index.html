@@ -67,10 +67,10 @@
                 padding: 14px 16px; margin-bottom: 12px; box-shadow: var(--shadow); }
   .card-meta { color: var(--brown-muted); font-size: .82rem; margin-bottom: 8px;
                display: flex; justify-content: space-between; align-items: center; }
-  .date-year { font-weight: 800; color: var(--brown); }
+  .date-year { font-weight: 400; color: inherit; }
   .card-year { background: var(--hint-bg); border: 1px solid var(--hint-border);
                border-radius: 20px; padding: 2px 10px; font-size: .75rem; color: var(--brown-light); }
-  .card-year strong { font-weight: 800; color: var(--brown); }
+  .card-year strong { font-weight: 400; color: inherit; }
   .card-content { color: var(--text); line-height: 1.75; font-size: .95rem; word-break: break-word; }
   .card-manage { display: flex; justify-content: flex-end; margin-top: 10px; }
   .card-actions { display: flex; gap: 8px; margin-top: 10px; }
@@ -109,24 +109,28 @@
                  padding: 16px; margin-bottom: 12px; box-shadow: var(--shadow); cursor: pointer; }
   .recall-card.revealed { border-style: solid; cursor: default; }
   .recall-date { color: var(--brown-muted); font-size: .82rem; margin-bottom: 12px; }
-  .hidden-thread { display: flex; flex-direction: column; gap: 9px; padding: 4px 0; }
-  .hidden-line { display: flex; align-items: center; gap: 5px; min-height: 14px; }
-  .secret-dot { width: 3px; height: 3px; border-radius: 50%; background: #1d1a17;
-                animation: wordShake 2.4s ease-in-out infinite; opacity: .92; }
-  .secret-dot.blue { background: #4298d7; }
-  .secret-dot.tiny { width: 2px; height: 2px; opacity: .72; }
-  .hidden-keyword { color: #4298d7; font-size: .95rem; font-weight: 800; letter-spacing: 0;
-                    animation: wordShake 2.4s ease-in-out infinite; padding: 0 2px; }
-  .hidden-line:nth-child(2n) .secret-dot, .hidden-line:nth-child(2n) .hidden-keyword { animation-delay: .18s; }
-  .hidden-line:nth-child(3n) .secret-dot, .hidden-line:nth-child(3n) .hidden-keyword { animation-delay: .36s; }
+  .recall-keyword { margin-left: 8px; color: #4298d7; font-weight: 700; }
+  .hidden-thread { display: flex; flex-direction: column; gap: 10px; padding: 4px 0; }
+  .hidden-line { display: flex; align-items: center; gap: 6px; min-height: 15px; }
+  .secret-star { display: inline-block; color: #24211d; font-size: 11px; line-height: 1;
+                 animation: starDrift 3.2s ease-in-out infinite; opacity: .88; }
+  .secret-star.blue { color: #4298d7; }
+  .secret-star.tiny { font-size: 8px; opacity: .62; }
+  .hidden-line:nth-child(2n) .secret-star { animation-delay: .22s; }
+  .hidden-line:nth-child(3n) .secret-star { animation-delay: .48s; }
   .recall-content { display: none; margin-top: 12px; }
-  .recall-card.revealed .hidden-thread { opacity: .35; }
+  .recall-card.revealed .hidden-thread { display: none; }
   .recall-card.revealed .recall-content { display: block; }
   @keyframes wordShake {
     0%, 84%, 100% { transform: translateX(0); }
     88% { transform: translateX(-2px) rotate(-1deg); }
     92% { transform: translateX(2px) rotate(1deg); }
     96% { transform: translateX(-1px); }
+  }
+  @keyframes starDrift {
+    0%, 100% { transform: translate(0, 0) rotate(0deg); }
+    38% { transform: translate(1px, -2px) rotate(8deg); }
+    72% { transform: translate(-2px, 1px) rotate(-6deg); }
   }
 
   /* ── Form elements ── */
@@ -580,7 +584,7 @@ function todayDeck(entries, currentYear) {
 function deckPreviewCard(d, currentYear) {
   const time = d.time ? d.time.slice(0, 5) : '';
   const yearDiff = currentYear - parseInt(d.date.slice(0, 4));
-  const yearBadge = yearDiff > 0 ? `<span class="card-year"><strong>${d.date.slice(0,4)}</strong>年 · ${yearDiff}年前</span>` : '';
+  const yearBadge = yearDiff > 0 ? `<span class="card-year">${d.date.slice(0,4)}年 · ${yearDiff}年前</span>` : '';
   return `
     <div class="deck-card" onclick="toggleDeckCard(this)">
       <div class="card-meta">
@@ -601,14 +605,14 @@ function toggleDeckCard(card) {
 function recallCard(d, currentYear) {
   const time = d.time ? d.time.slice(0, 5) : '';
   const keyword = extractMemoryKeyword(d.content);
-  const hiddenHtml = hiddenThreadPreview(d.content, keyword);
+  const hiddenHtml = hiddenThreadPreview(d.content);
   const yearBadge = currentYear - parseInt(d.date.slice(0, 4)) > 0
-    ? `<span class="card-year"><strong>${d.date.slice(0,4)}</strong>年 · ${currentYear - parseInt(d.date.slice(0, 4))}年前</span>`
+    ? `<span class="card-year">${d.date.slice(0,4)}年 · ${currentYear - parseInt(d.date.slice(0, 4))}年前</span>`
     : '';
   return `
     <div class="recall-card" id="card-${d.id}" data-content="${escAttr(d.content)}" data-images="${escAttr(d.images||'')}" onclick="revealRecall(${d.id})">
       <div class="card-meta">
-        <span>${formatDateWithBoldYear(d.date)} ${time}</span>
+        <span>${formatDateWithBoldYear(d.date)} ${time}<span class="recall-keyword">${escHtml(keyword)}</span></span>
         ${yearBadge}
       </div>
       <div class="hidden-thread">${hiddenHtml}</div>
@@ -655,22 +659,18 @@ function extractMemoryKeyword(content) {
   return [...scores.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '记忆';
 }
 
-function hiddenThreadPreview(content, keyword) {
+function hiddenThreadPreview(content) {
   const textLength = Math.max(String(content).replace(/\s/g, '').length, 24);
   const lineCount = Math.min(8, Math.max(4, Math.ceil(textLength / 18)));
-  let usedKeyword = false;
   const lines = [];
   for (let line = 0; line < lineCount; line++) {
     const dotCount = Math.min(32, Math.max(13, Math.ceil(textLength / lineCount) + (line % 3) * 4));
     let parts = '';
     for (let i = 0; i < dotCount; i++) {
-      if (!usedKeyword && line === 1 && i === Math.floor(dotCount / 3)) {
-        parts += `<span class="hidden-keyword">${escHtml(keyword)}</span>`;
-        usedKeyword = true;
-      }
       const blue = (i + line) % 5 === 0 ? ' blue' : '';
       const tiny = (i * 2 + line) % 7 === 0 ? ' tiny' : '';
-      parts += `<span class="secret-dot${blue}${tiny}"></span>`;
+      const mark = (i + line) % 6 === 0 ? '✦' : ((i + line) % 4 === 0 ? '⋆' : '·');
+      parts += `<span class="secret-star${blue}${tiny}">${mark}</span>`;
     }
     lines.push(`<div class="hidden-line">${parts}</div>`);
   }
@@ -682,13 +682,13 @@ function imageHtml(d) {
 }
 
 function formatDateWithBoldYear(dateStr) {
-  return `<strong class="date-year">${escHtml(String(dateStr).slice(0,4))}</strong>${escHtml(String(dateStr).slice(4))}`;
+  return `${escHtml(String(dateStr))}`;
 }
 
 // ── Diary Card ────────────────────────────────────────────────────
 function diaryCard(d, currentYear, keywords = []) {
   const yearDiff = currentYear - parseInt(d.date.slice(0, 4));
-  const yearBadge = yearDiff > 0 ? `<span class="card-year"><strong>${d.date.slice(0,4)}</strong>年 · ${yearDiff}年前</span>` : '';
+  const yearBadge = yearDiff > 0 ? `<span class="card-year">${d.date.slice(0,4)}年 · ${yearDiff}年前</span>` : '';
   let content = escHtml(d.content).replace(/\n/g, '<br>');
   if (keywords.length) {
     keywords.forEach(kw => {
