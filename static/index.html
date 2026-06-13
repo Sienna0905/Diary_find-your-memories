@@ -109,14 +109,18 @@
                  padding: 16px; margin-bottom: 12px; box-shadow: var(--shadow); cursor: pointer; }
   .recall-card.revealed { border-style: solid; cursor: default; }
   .recall-date { color: var(--brown-muted); font-size: .82rem; margin-bottom: 12px; }
-  .recall-keywords { display: flex; flex-wrap: wrap; gap: 8px; min-height: 40px; }
-  .keyword-chip { background: var(--hint-bg); border: 1px solid var(--hint-border); color: var(--brown);
-                  border-radius: 999px; padding: 6px 11px; font-size: .9rem; animation: wordShake 2.8s ease-in-out infinite; }
-  .keyword-chip:nth-child(2) { animation-delay: .25s; }
-  .keyword-chip:nth-child(3) { animation-delay: .55s; }
-  .keyword-chip:nth-child(4) { animation-delay: .8s; }
+  .hidden-thread { display: flex; flex-direction: column; gap: 9px; padding: 4px 0; }
+  .hidden-line { display: flex; align-items: center; gap: 5px; min-height: 14px; }
+  .secret-dot { width: 3px; height: 3px; border-radius: 50%; background: #1d1a17;
+                animation: wordShake 2.4s ease-in-out infinite; opacity: .92; }
+  .secret-dot.blue { background: #4298d7; }
+  .secret-dot.tiny { width: 2px; height: 2px; opacity: .72; }
+  .hidden-keyword { color: #4298d7; font-size: .95rem; font-weight: 800; letter-spacing: 0;
+                    animation: wordShake 2.4s ease-in-out infinite; padding: 0 2px; }
+  .hidden-line:nth-child(2n) .secret-dot, .hidden-line:nth-child(2n) .hidden-keyword { animation-delay: .18s; }
+  .hidden-line:nth-child(3n) .secret-dot, .hidden-line:nth-child(3n) .hidden-keyword { animation-delay: .36s; }
   .recall-content { display: none; margin-top: 12px; }
-  .recall-card.revealed .recall-keywords { opacity: .45; }
+  .recall-card.revealed .hidden-thread { opacity: .35; }
   .recall-card.revealed .recall-content { display: block; }
   @keyframes wordShake {
     0%, 84%, 100% { transform: translateX(0); }
@@ -596,8 +600,8 @@ function toggleDeckCard(card) {
 
 function recallCard(d, currentYear) {
   const time = d.time ? d.time.slice(0, 5) : '';
-  const keywords = extractMemoryKeywords(d.content);
-  const keywordHtml = keywords.map(kw => `<span class="keyword-chip">${escHtml(kw)}</span>`).join('');
+  const keyword = extractMemoryKeyword(d.content);
+  const hiddenHtml = hiddenThreadPreview(d.content, keyword);
   const yearBadge = currentYear - parseInt(d.date.slice(0, 4)) > 0
     ? `<span class="card-year"><strong>${d.date.slice(0,4)}</strong>年 · ${currentYear - parseInt(d.date.slice(0, 4))}年前</span>`
     : '';
@@ -607,7 +611,7 @@ function recallCard(d, currentYear) {
         <span>${formatDateWithBoldYear(d.date)} ${time}</span>
         ${yearBadge}
       </div>
-      <div class="recall-keywords">${keywordHtml}</div>
+      <div class="hidden-thread">${hiddenHtml}</div>
       <div class="recall-content">
         <div class="card-content" id="content-${d.id}">${escHtml(d.content).replace(/\n/g, '<br>')}</div>
         ${imageHtml(d)}
@@ -626,30 +630,52 @@ function revealRecall(id) {
   document.getElementById(`card-${id}`)?.classList.add('revealed');
 }
 
-function extractMemoryKeywords(content) {
-  const stopWords = new Set(['今天','昨天','明天','这个','那个','时候','感觉','真的','还是','然后','因为','所以','但是','如果','已经','自己','我们','你们','他们','一下','一个','没有','不是','就是','什么','知道','觉得','可以','一起','后来','现在','上午','下午','晚上']);
-  const clean = String(content).replace(/[0-9a-zA-Z_]+/g, ' ').replace(/[，。！？、；：“”‘’（）()《》【】\[\]…,.!?;:"']/g, ' ');
-  const chunks = clean.match(/[\u4e00-\u9fa5]{2,6}/g) || [];
-  const scores = new Map();
+function extractMemoryKeyword(content) {
+  const stopWords = new Set(['今天','昨天','明天','这个','那个','时候','感觉','真的','还是','然后','因为','所以','但是','如果','已经','自己','我们','你们','他们','一下','一个','没有','不是','就是','什么','知道','觉得','可以','一起','后来','现在','上午','下午','晚上','日记','记录']);
+  const text = String(content).replace(/[0-9a-zA-Z_]+/g, ' ').replace(/[，。！？、；：“”‘’（）()《》【】\[\]…,.!?;:"']/g, ' ');
+  const candidates = [];
+  if ('Segmenter' in Intl) {
+    const segmenter = new Intl.Segmenter('zh-CN', { granularity: 'word' });
+    for (const item of segmenter.segment(text)) {
+      const word = item.segment.trim();
+      if (item.isWordLike && /^[\u4e00-\u9fa5]{2,6}$/.test(word) && !stopWords.has(word)) candidates.push(word);
+    }
+  }
+  const chunks = text.match(/[\u4e00-\u9fa5]{2,6}/g) || [];
   chunks.forEach(chunk => {
     for (let len = Math.min(4, chunk.length); len >= 2; len--) {
       for (let i = 0; i <= chunk.length - len; i++) {
         const word = chunk.slice(i, i + len);
-        if (stopWords.has(word)) continue;
-        scores.set(word, (scores.get(word) || 0) + len);
+        if (!stopWords.has(word)) candidates.push(word);
       }
     }
   });
-  const words = [...scores.entries()].sort((a, b) => b[1] - a[1]).map(([word]) => word);
-  const uniqueWords = [];
-  for (const word of words) {
-    if (uniqueWords.some(existing => existing === word || existing.includes(word) || word.includes(existing))) continue;
-    uniqueWords.push(word);
-    if (uniqueWords.length >= 4) break;
-  }
-  return uniqueWords.length ? uniqueWords : ['那天', '记忆', '心情'];
+  const scores = new Map();
+  candidates.forEach(word => scores.set(word, (scores.get(word) || 0) + word.length));
+  return [...scores.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '记忆';
 }
 
+function hiddenThreadPreview(content, keyword) {
+  const textLength = Math.max(String(content).replace(/\s/g, '').length, 24);
+  const lineCount = Math.min(8, Math.max(4, Math.ceil(textLength / 18)));
+  let usedKeyword = false;
+  const lines = [];
+  for (let line = 0; line < lineCount; line++) {
+    const dotCount = Math.min(32, Math.max(13, Math.ceil(textLength / lineCount) + (line % 3) * 4));
+    let parts = '';
+    for (let i = 0; i < dotCount; i++) {
+      if (!usedKeyword && line === 1 && i === Math.floor(dotCount / 3)) {
+        parts += `<span class="hidden-keyword">${escHtml(keyword)}</span>`;
+        usedKeyword = true;
+      }
+      const blue = (i + line) % 5 === 0 ? ' blue' : '';
+      const tiny = (i * 2 + line) % 7 === 0 ? ' tiny' : '';
+      parts += `<span class="secret-dot${blue}${tiny}"></span>`;
+    }
+    lines.push(`<div class="hidden-line">${parts}</div>`);
+  }
+  return lines.join('');
+}
 function imageHtml(d) {
   const imgs = d.images ? JSON.parse(d.images) : [];
   return imgs.length ? `<div class="card-images">${imgs.map(src => `<img src="${src}" class="card-img" onclick="openImg(this.src)">`).join('')}</div>` : '';
